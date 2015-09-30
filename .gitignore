@@ -1,0 +1,4 @@
+*.xy
+*~
+*.o
+run_rdr.sh

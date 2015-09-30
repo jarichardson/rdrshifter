@@ -1,0 +1,63 @@
+SUMMARY
+rdrshifter will shift data, interpolate this data
+at control locations from a DEM, and output DEM
+and data values at locations where both datasets
+have valid points. This code was developed to
+shift terrestrial scanning radar onto a SRTM DEM.
+
+COMPILING AND RUNNING
+To compile, use make in the src directory. The
+program will be created in this directory, so
+cp it to the parent directory if you prefer.
+The GDAL C library is needed to load in the
+raster datasets.
+
+To run, modify the sample configuration file
+shift.cfg. You might use the command
+./rdrshifter shift.cfg
+or something similar.
+
+INPUT AND TRANSFORMATION
+Two rasters are needed: a control DEM (e.g. SRTM)
+and a data DEM (e.g. a radar dem). The program
+transforms the values of the data DEM with 6-DOF
+and can SCALE this data. Translation is set in
+meters, with positive values moving the data
+east, north, and/or up. Rotation is set in
+degrees CCW. Points are rotated around the scan
+position location. Along the Z-axis, north-east 
+points will move to the north-west. Along the 
+Y-axis, high-east points will move to the low-
+east. Along the X-axis, north-high points will
+move to the south-high. Point-to-scanner distance
+is scaled relative to 1.0. Transformations occur
+in the order:
+1. Rotation on the Z axis (Elevation)
+2. Rotation on the Y axis (Northing)
+3. Rotation on the X axis (Easting)
+4. Translation in 3 dimensions
+5. Scaling relative to translated origin point.
+
+INTERPOLATION
+Transformed data locations are interpolated at
+Control DEM locations using an inverse-distance
+weighted algorithm:
+z(x) = sum(w(x')*z(x')) / w(x')
+w(x') = (1/dist(x,x'))**p
+p=2
+where x' is the location of each nearest-neighbor
+in the four quadrants NE, NW, SE, SW.
+
+OUTPUT
+If both the Control DEM and the shifted data set
+have valid elevations at a given location, both
+elevations are output to a tab-delimited ASCII
+file according to the configuration file.
+
+TIMING
+For 10,000 points output from each data source,
+this code should take around 2 seconds.
+For 90,000 points, this code might take 20-30 s.
+
+AUTHOR
+Jacob Richardson, jarichardson@mail.usf.edu
