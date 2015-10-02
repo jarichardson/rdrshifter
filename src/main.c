@@ -33,6 +33,7 @@ int main(int argc, char *argv[]) {
 	double NNelev[4];
 	double NNwt[4];
 	double curdistance;
+	double maxquaddist;
 	
 	double DEMnoDATA;
 	double RDRnoDATA;
@@ -199,9 +200,11 @@ int main(int argc, char *argv[]) {
 			RDRvals[i].easting   -= origin.easting;
 			RDRvals[i].northing  -= origin.northing;
 			RDRvals[i].elevation -= origin.elevation;
+			/*
 			if(i==0) {
 				printf("pre-rot:  %0.3fE\t%0.3fN\t%0.3fElev\n",RDRvals[i].easting,RDRvals[i].northing,RDRvals[i].elevation);
 			}
+			*/
 		
 			/*ROTATE RDR locations**********************/
 			/*ABOUT Z AXIS*/
@@ -316,7 +319,7 @@ int main(int argc, char *argv[]) {
 			}
 		}
 	}
-	
+	printf("All points shifted");
 	/*Print new range of RADAR coordinates, post shift.*/
 	printf("\nNew Radar Range is:   %0.3f\n",   RDRUL.northing);
 	printf("               %0.3f    %0.3f\n", RDRUL.easting, RDRLR.easting);
@@ -329,7 +332,7 @@ int main(int argc, char *argv[]) {
 	}
 	
 	/*CROP ALL THE DATA*************************************************************************/
-	printf("Cropping the BODY data to the LAB data extent\n");
+	printf("Cropping the RADAR data to the control DEM data extent\n");
 	
 	/*move Radar values to new, potentially smaller list, for speed*/
 	if((shftRDRvals = malloc (sizeof (point) * (RDRinboundsct)))==NULL) {
@@ -350,50 +353,33 @@ int main(int argc, char *argv[]) {
 	}
 	
 	free(RDRvals); /*free memory of old array*/
-	printf("                      copied %u values to cropped BODY array\n",(j+1));
 	
-	printf("Cropping the LAB data to the BODY data extent\n");
 	
-	/*Now find new range of DEM and scrap values outside of the Radar range*/
-	if(DEMUL.easting < RDRUL.easting) DEMUL.easting = RDRUL.easting;
-	if(DEMLR.easting > RDRLR.easting) DEMLR.easting = RDRLR.easting;
-	if(DEMUL.northing > RDRUL.northing) DEMUL.northing = RDRUL.northing;
-	if(DEMLR.northing < RDRLR.northing) DEMLR.northing = RDRLR.northing;
-	
+	/*Now scrap DEM NaN values*/
 	DEMinboundsct=0;
 	for(i=0;i<demmax;i++){
-		if (DEMvals[i].easting >= DEMUL.easting && DEMvals[i].easting <= DEMLR.easting){
-			if (DEMvals[i].northing <= DEMUL.northing && DEMvals[i].northing >= DEMLR.northing) {
-				DEMinboundsct++;
-			}
+		if ((DEMvals[i].elevation != DEMnoDATA) && 
+		    (isnan(DEMvals[i].elevation)==FALSE)) {
+			DEMinboundsct++;
 		}
 	}
 	
-		/*DEMGeoTransform[0] lower left x
-	  DEMGeoTransform[1] w-e pixel resolution
-	  DEMGeoTransform[2] number of cols, assigned manually in this module 
-	  DEMGeoTransform[3] lower left y
-	  DEMGeoTransform[4] number of lines, assigned manually in this module
-	  DEMGeoTransform[5] n-s pixel resolution (negative value) */
-
 	/*move DEM values to new, potentially smaller list, for speed*/
 	if((cropDEMvals = malloc (sizeof (point) * (DEMinboundsct)))==NULL) {
 		printf("ERROR [MAIN]: Out of Memory creating Cropped DEM Values List!\n");
 		return(-1);
 	}
-	
 	j=0;
 	for(i=0;i<demmax;i++){
-		if (DEMvals[i].easting >= DEMUL.easting && DEMvals[i].easting <= DEMLR.easting){
-			if (DEMvals[i].northing <= DEMUL.northing && DEMvals[i].northing >= DEMLR.northing) {
-				cropDEMvals[j] = DEMvals[i];
-				j++;
-			}
+		if ((DEMvals[i].elevation != DEMnoDATA) && 
+		    (isnan(DEMvals[i].elevation)==FALSE)) {
+			cropDEMvals[j] = DEMvals[i];
+			j++;
 		}
 	}
 	
 	free(DEMvals); /*free memory of old array*/
-	printf("                      copied %u values to cropped LAB array\n",(j+1));
+	printf("\nFound %u data values in control DEM (not NaN/NoDATA)\n",j);
 	
 	
 	if((RDRinterp = malloc (sizeof (point) * (DEMinboundsct)))==NULL) {
@@ -414,80 +400,93 @@ int main(int argc, char *argv[]) {
 		RDRinterp[i].northing = cropDEMvals[i].northing;
 		RDRinterp[i].elevation = -9999; /*starting elevation in case no value can be assigned*/
 		
-		/*if DEM is not NoDATA*/
-		if ((cropDEMvals[i].elevation != DEMnoDATA) && (isnan(cropDEMvals[i].elevation)==FALSE)){
-			/*use near neighbor to find elevation
-				loop through all, if in a quadrant, check if it's the closest point.
-				after loop, closest 4 points get averaged, weighted by distance.
-				must have all 4 points. All that is needed is to preserve a distance
-				and an elevation for 4 quadrants. double[4] distance, double[4] elev*/
 		
-			for(j=0;j<=3;j++) {
-				/*reset distance*/
-				NNdist[j] = DBL_MAX;
-			}
+		/*use near neighbor to find elevation
+			loop through all, if in a quadrant, check if it's the closest point.
+			after loop, closest 4 points get averaged, weighted by distance.
+			must have all 4 points. All that is needed is to preserve a distance
+			and an elevation for 4 quadrants. double[4] distance, double[4] elev*/
+	
+		for(j=0;j<=3;j++) {
+			/*reset distance*/
+			NNdist[j] = DBL_MAX;
+			/*elevation is reset to 0, just in case no locations in quad are found*/
+			NNelev[j] = 0;
+		}
 		
-		
-			for(j=0;j<RDRinboundsct;j++){
-				if (abs(shftRDRvals[j].easting-RDRinterp[i].easting) < (2.0*DEMmetadata[1])) {
-				if (abs(shftRDRvals[j].northing-RDRinterp[i].northing) < (2.0*DEMmetadata[1])) {
-					curdistance = pow(pow((shftRDRvals[j].easting  - RDRinterp[i].easting ),2.0) +
-					              pow((shftRDRvals[j].northing - RDRinterp[i].northing),2.0),0.5);
-					
-					/*First quadrant*/
-					if((shftRDRvals[j].easting  >= RDRinterp[i].easting) && 
-						 (shftRDRvals[j].northing >= RDRinterp[i].northing)) {
-						/*is distance smallest?*/
-						if (curdistance < NNdist[0]) {
-							NNdist[0]  = curdistance;
-							NNelev[0]  = shftRDRvals[j].elevation;
-						}
+		maxquaddist = DBL_MAX;
+	
+		for(j=0;j<RDRinboundsct;j++){
+			/*only check this point if it is close enough to possibly be a NN*/
+			if (abs(shftRDRvals[j].easting-RDRinterp[i].easting) < maxquaddist) {
+			if (abs(shftRDRvals[j].northing-RDRinterp[i].northing) < maxquaddist) {
+			
+				/*Find current distance between interpolation loc and point-of-interest*/
+				curdistance = pow(pow((shftRDRvals[j].easting  - RDRinterp[i].easting ),2.0) +
+				              pow((shftRDRvals[j].northing - RDRinterp[i].northing),2.0),0.5);
+				
+				/*First quadrant*/
+				if((shftRDRvals[j].easting  >= RDRinterp[i].easting) && 
+					 (shftRDRvals[j].northing >= RDRinterp[i].northing)) {
+					/*is distance smallest?*/
+					if (curdistance < NNdist[0]) {
+						NNdist[0]  = curdistance;
+						NNelev[0]  = shftRDRvals[j].elevation;
 					}
-					/*Second quadrant*/
-					else if((shftRDRvals[j].easting   < RDRinterp[i].easting) && 
-						 (shftRDRvals[j].northing >= RDRinterp[i].northing)) {
-						if (curdistance < NNdist[1]) {
-							NNdist[1]  = curdistance;
-							NNelev[1] = shftRDRvals[j].elevation;
-						}
-					}
-					/*Third quadrant*/
-					else if((shftRDRvals[j].easting  < RDRinterp[i].easting) && 
-						 (shftRDRvals[j].northing < RDRinterp[i].northing)) {
-						if (curdistance < NNdist[2]) {
-							NNdist[2]  = curdistance;
-							NNelev[2] = shftRDRvals[j].elevation;
-						}
-					}
-					/*Fourth quadrant*/
-					else {
-						if (curdistance < NNdist[3]) {
-							NNdist[3]  = curdistance;
-							NNelev[3] = shftRDRvals[j].elevation;
-						}
-					}
-				}} /*If the point is within 2 pixels of the point*/
-			} /*For all radar values*/
-		
-			/*if all distances are assigned*/
-			if (((NNdist[0]<DBL_MAX)&&(NNdist[1]<DBL_MAX))&&
-				  ((NNdist[2]<DBL_MAX)&&(NNdist[3]<DBL_MAX))) {
-				/*interpolate elevation*/
-				if (NNdist[0]==0) RDRinterp[i].elevation = NNelev[0];
-				else if (NNdist[1]==0) RDRinterp[i].elevation = NNelev[1];
-				else if (NNdist[2]==0) RDRinterp[i].elevation = NNelev[2];
-				else if (NNdist[3]==0) RDRinterp[i].elevation = NNelev[3];
-				else {
-					NNwt[0] = pow((1.0/NNdist[0]),2.0);
-					NNwt[1] = pow((1.0/NNdist[1]),2.0);
-					NNwt[2] = pow((1.0/NNdist[2]),2.0);
-					NNwt[3] = pow((1.0/NNdist[3]),2.0);
-					RDRinterp[i].elevation = 	(NNwt[0]*NNelev[0] + NNwt[1]*NNelev[1] + 
-					                           NNwt[2]*NNelev[2] + NNwt[3]*NNelev[3]) /
-					                          (NNwt[0] + NNwt[1] + NNwt[2] + NNwt[3]);
 				}
-			} /*end interpolate this point*/
-		} /*end only do this point if there's a DEM value*/
+				/*Second quadrant*/
+				else if((shftRDRvals[j].easting   < RDRinterp[i].easting) && 
+					 (shftRDRvals[j].northing >= RDRinterp[i].northing)) {
+					if (curdistance < NNdist[1]) {
+						NNdist[1]  = curdistance;
+						NNelev[1] = shftRDRvals[j].elevation;
+					}
+				}
+				/*Third quadrant*/
+				else if((shftRDRvals[j].easting  < RDRinterp[i].easting) && 
+					 (shftRDRvals[j].northing < RDRinterp[i].northing)) {
+					if (curdistance < NNdist[2]) {
+						NNdist[2]  = curdistance;
+						NNelev[2] = shftRDRvals[j].elevation;
+					}
+				}
+				/*Fourth quadrant*/
+				else {
+					if (curdistance < NNdist[3]) {
+						NNdist[3]  = curdistance;
+						NNelev[3] = shftRDRvals[j].elevation;
+					}
+				}
+			}} /*If the point is within the farthest previously found distance of the point*/
+			
+			/*find new farthest NNdist from point*/
+			maxquaddist = NNdist[0];
+			if (NNdist[1]>maxquaddist) maxquaddist = NNdist[1];
+			if (NNdist[2]>maxquaddist) maxquaddist = NNdist[2];
+			if (NNdist[3]>maxquaddist) maxquaddist = NNdist[3];
+			
+		} /*For all radar values*/
+	
+		/*interpolate elevation*/
+		/*If the nearest neigbor is AT the location, do not interpolate*/
+		if (NNdist[0]==0) RDRinterp[i].elevation = NNelev[0];
+		else if (NNdist[1]==0) RDRinterp[i].elevation = NNelev[1];
+		else if (NNdist[2]==0) RDRinterp[i].elevation = NNelev[2];
+		else if (NNdist[3]==0) RDRinterp[i].elevation = NNelev[3];
+		else {
+			/*If no locations in Quad 1 were found, weight=0*/
+			if (NNdist[0]==DBL_MAX) NNwt[0] = 0;
+			else NNwt[0] = pow((1.0/NNdist[0]),2.0);
+			if (NNdist[1]==DBL_MAX) NNwt[1] = 0; /*Quad 2 weight*/
+			else NNwt[1] = pow((1.0/NNdist[1]),2.0);
+			if (NNdist[2]==DBL_MAX) NNwt[2] = 0; /*Quad 3 weight*/
+			else NNwt[2] = pow((1.0/NNdist[2]),2.0);
+			if (NNdist[3]==DBL_MAX) NNwt[3] = 0; /*Quad 4 weight*/
+			else NNwt[3] = pow((1.0/NNdist[3]),2.0);
+			RDRinterp[i].elevation = 	(NNwt[0]*NNelev[0] + NNwt[1]*NNelev[1] + 
+			                           NNwt[2]*NNelev[2] + NNwt[3]*NNelev[3]) /
+			                          (NNwt[0] + NNwt[1] + NNwt[2] + NNwt[3]);
+		}
 	} /*end for all points to be interpolated*/
 	
 	printf("  Done!\n\n");
@@ -520,7 +519,7 @@ int main(int argc, char *argv[]) {
 				               RDRinterp[i].easting,
 				               RDRinterp[i].northing,
 				               RDRinterp[i].elevation);
-				               
+			
 		}
 	}
 
@@ -533,6 +532,10 @@ int main(int argc, char *argv[]) {
 	endTime = time(NULL);
 	printf("\nElapsed Time approximately %u seconds.\n\n",
 	       (unsigned)(endTime - startTime));
+	
+	free(cropDEMvals);
+	free(RDRinterp);
+	free(shftRDRvals);
 	
 	return(0);
 }

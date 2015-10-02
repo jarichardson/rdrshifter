@@ -48,16 +48,29 @@ p=2
 where x' is the location of each nearest-neighbor
 in the four quadrants NE, NW, SE, SW.
 
+**Original approach only finds NN's in a 2 DEM-
+  pixel search radius, only interpolated if NN
+  were found in all 4 quadrants.
+**PEST-METHOD: finds Nearest Neighbor regardless
+  of distance, interpolates regardless of # of
+  quadrants filled with a NN.
+
+
 OUTPUT
 If both the Control DEM and the shifted data set
 have valid elevations at a given location, both
 elevations are output to a tab-delimited ASCII
 file according to the configuration file.
 
+**PEST-METHOD: as long as there is a Control DEM
+  value (not NoDATA/NaN) the location will be 
+  output.
+
 TIMING
 For 10,000 points output from each data source,
 this code should take around 2 seconds.
 For 90,000 points, this code might take 20-30 s.
+**PEST-METHOD might take 3x as long.
 
 AUTHOR
 Jacob Richardson, jarichardson@mail.usf.edu
