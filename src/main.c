@@ -193,7 +193,7 @@ int main(int argc, char *argv[]) {
 	printf("         %0.3f%% of original size\n\n",(scale*100.0));
 	
 	for(i=0;i<rdrmax;i++){
-		if (RDRvals[i].elevation != RDRnoDATA) { /*only shift if this location has a value*/
+		if ((RDRvals[i].elevation != RDRnoDATA) && (isnan(RDRvals[i].elevation)==FALSE)) { /*only shift if this location has a value*/
 		
 			/*Remove origin from locations*/
 			RDRvals[i].easting   -= origin.easting;
@@ -218,10 +218,12 @@ int main(int argc, char *argv[]) {
 			/*apply rotation*/
 			RDRvals[i].easting  = cos(rotate.elevation + curangle) * hypotenuse;
 			RDRvals[i].northing = sin(rotate.elevation + curangle) * hypotenuse;
-		
+			
+			/*
 			if(i==0) {
 				printf("postrotZ: %0.3fE\t%0.3fN\t%0.3fElev\n",RDRvals[i].easting,RDRvals[i].northing,RDRvals[i].elevation);
 			}
+			*/
 		
 			/*ABOUT Y AXIS*/		
 			hypotenuse = pow((pow(RDRvals[i].easting,2.0) + pow(RDRvals[i].elevation,2.0)),0.5);
@@ -237,10 +239,12 @@ int main(int argc, char *argv[]) {
 			/*apply rotation*/
 			RDRvals[i].elevation = cos(rotate.northing + curangle) * hypotenuse;
 			RDRvals[i].easting   = sin(rotate.northing + curangle) * hypotenuse;
-		
+			
+			/*
 			if(i==0) {
 				printf("postrotY: %0.3fE\t%0.3fN\t%0.3fElev\n",RDRvals[i].easting,RDRvals[i].northing,RDRvals[i].elevation);
 			}
+			*/
 		
 			/*ABOUT X AXIS*/
 			hypotenuse = pow((pow(RDRvals[i].elevation,2.0) + pow(RDRvals[i].northing,2.0)),0.5);
@@ -256,10 +260,12 @@ int main(int argc, char *argv[]) {
 			/*apply rotation*/
 			RDRvals[i].northing  =  cos(rotate.easting + curangle) * hypotenuse;
 			RDRvals[i].elevation =  sin(rotate.easting + curangle) * hypotenuse;
-		
+			
+			/*
 			if(i==0) {
 				printf("postrotX: %0.3fE\t%0.3fN\t%0.3fElev\n",RDRvals[i].easting,RDRvals[i].northing,RDRvals[i].elevation);
 			}
+			*/
 		
 		
 			/*find distance from origin (0,0)*/
@@ -276,16 +282,18 @@ int main(int argc, char *argv[]) {
 			RDRvals[i].easting   += translate.easting   + dist.easting   + origin.easting;
 			RDRvals[i].northing  += translate.northing  + dist.northing  + origin.northing;
 			RDRvals[i].elevation += translate.elevation + dist.elevation + origin.elevation;
-		
+			
+			/*
 			if(i==0) {
 				printf("post-trn: %0.3fE\t%0.3fN\t%0.3fElev\n",RDRvals[i].easting,RDRvals[i].northing,RDRvals[i].elevation);
 			}
+			*/
 		}
 	}
 	
 	j=0;
 	for(i=0;i<rdrmax;i++) {
-		if (RDRvals[i].elevation != RDRnoDATA) { /*only count if this location has a value*/
+		if ((RDRvals[i].elevation != RDRnoDATA) && (isnan(RDRvals[i].elevation)==FALSE)) { /*only count if this location has a value*/
 			/*Find New Range*/
 			if((j++)==0) {
 				RDRUL.easting  = RDRvals[i].easting;
@@ -333,7 +341,7 @@ int main(int argc, char *argv[]) {
 	for(i=0;i<rdrmax;i++){
 		if((RDRvals[i].easting >= expandedDEMUL.easting) && (RDRvals[i].easting <= expandedDEMLR.easting)){
 			if((RDRvals[i].northing <= expandedDEMUL.northing) && (RDRvals[i].northing >= expandedDEMLR.northing)) {
-				if (RDRvals[i].elevation != RDRnoDATA) { /*only copy if there's data*/
+				if ((RDRvals[i].elevation != RDRnoDATA) && (isnan(RDRvals[i].elevation)==FALSE)) { /*only copy if there's data*/
 					shftRDRvals[j] = RDRvals[i];
 					j++;
 				}
@@ -407,8 +415,7 @@ int main(int argc, char *argv[]) {
 		RDRinterp[i].elevation = -9999; /*starting elevation in case no value can be assigned*/
 		
 		/*if DEM is not NoDATA*/
-		if (cropDEMvals[i].elevation != DEMnoDATA) {
-		
+		if ((cropDEMvals[i].elevation != DEMnoDATA) && (isnan(cropDEMvals[i].elevation)==FALSE)){
 			/*use near neighbor to find elevation
 				loop through all, if in a quadrant, check if it's the closest point.
 				after loop, closest 4 points get averaged, weighted by distance.

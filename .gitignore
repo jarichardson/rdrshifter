@@ -2,3 +2,5 @@
 *~
 *.o
 run_rdr.sh
+coverage_compare/*
+gmt.history
